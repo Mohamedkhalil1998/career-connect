@@ -1,0 +1,144 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatar        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  profile       Profile?
+  cvs           CV[]
+  assessments   Assessment[]
+  applications  Application[]
+}
+
+model Profile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobTitle        String?
+  location        String?
+  bio             String?
+  skills          String[] // verified skills after assessment
+  linkedinUrl     String?
+  portfolioUrl    String?
+  yearsExperience Int?
+  profileComplete Int      @default(0) // percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CV {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalPath    String   // raw uploaded file
+  enhancedContent String?  @db.Text // AI-enhanced ATS CV text
+  parsedData      Json?    // extracted structured data
+  atsScore        Int?     // ATS compatibility score
+  status          CVStatus @default(PROCESSING)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum CVStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Assessment {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobTitle    String
+  skills      String[]         // skills being assessed
+  questions   Json             // array of questions
+  answers     Json?            // user's answers
+  score       Float?
+  passed      Boolean?
+  recordingId String?          // video/audio recording reference
+  proctoring  Json?            // proctoring data (gaze, tab switches, etc.)
+  status      AssessmentStatus @default(PENDING)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+}
+
+enum AssessmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model Job {
+  id            String   @id @default(uuid())
+  externalId    String?  @unique // from source site
+  title         String
+  company       String
+  location      String?
+  type          String?  // full-time, part-time, remote
+  salary        String?
+  description   String   @db.Text
+  requirements  String[] // extracted requirements/skills
+  source        String   // linkedin, wuzzuf, indeed, etc.
+  sourceUrl     String
+  postedAt      DateTime?
+  scrapedAt     DateTime @default(now())
+  isActive      Boolean  @default(true)
+
+  applications  Application[]
+  matches       JobMatch[]
+}
+
+model JobMatch {
+  id         String   @id @default(uuid())
+  userId     String
+  jobId      String
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  score      Float    // match percentage 0-100
+  reasons    String[] // why it matched
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, jobId])
+}
+
+model Application {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId         String
+  job           Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  coverLetter   String?           @db.Text
+  status        ApplicationStatus @default(APPLIED)
+  appliedAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  notes         String?
+  responseAt    DateTime?
+
+  @@unique([userId, jobId])
+}
+
+enum ApplicationStatus {
+  APPLIED
+  VIEWED
+  INTERVIEW
+  REJECTED
+  OFFER
+  ACCEPTED
+}
