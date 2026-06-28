@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs_18", "npm-9_x"]
+nixPkgs = ["nodejs_18"]
 
 [phases.install]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npx prisma generate", "npx prisma db push"]
+cmds = ["npx prisma generate"]
 
 [start]
-cmd = "node src/index.js"
+cmd = "npx prisma db push && node src/index.js"
