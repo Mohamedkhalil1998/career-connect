@@ -1,42 +1,44 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy initialization - don't crash if key is missing
+let openai = null;
 
-// ── CV Enhancement ──────────────────────────────────────────────────
+const getClient = () => {
+  if (!openai) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not configured. Please add it in Railway Variables.');
+    }
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openai;
+};
+
+// ── CV Enhancement ──
 export const enhanceCVWithAI = async (rawText, jobTitle) => {
-  const response = await openai.chat.completions.create({
+  const client = getClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `You are an expert ATS-optimization specialist and professional CV writer with 20+ years of experience.
-Your task is to rewrite the provided CV to:
-1. Be fully ATS (Applicant Tracking System) compatible
-2. Use strong action verbs and quantified achievements
-3. Include relevant keywords for the role
-4. Follow the exact ATS-friendly structure below
-5. Return a JSON object with the following structure
-
-Return ONLY valid JSON, no markdown.`,
+        content: `You are an expert ATS-optimization specialist. Return ONLY valid JSON, no markdown.`,
       },
       {
         role: 'user',
         content: `Target Job Title: ${jobTitle || 'Not specified'}
+Raw CV Content: ${rawText}
 
-Raw CV Content:
-${rawText}
-
-Return JSON with this exact structure:
+Return JSON:
 {
-  "personalInfo": { "name": "", "email": "", "phone": "", "location": "", "linkedin": "", "portfolio": "" },
-  "summary": "3-4 line professional summary optimized for ATS",
+  "personalInfo": { "name": "", "email": "", "phone": "", "location": "" },
+  "summary": "3-4 line professional summary",
   "skills": ["skill1", "skill2"],
-  "experience": [{ "title": "", "company": "", "duration": "", "location": "", "bullets": ["achievement 1", "achievement 2"] }],
-  "education": [{ "degree": "", "institution": "", "year": "", "gpa": "" }],
-  "certifications": [{ "name": "", "issuer": "", "year": "" }],
-  "languages": [{ "language": "", "level": "" }],
+  "experience": [{ "title": "", "company": "", "duration": "", "bullets": ["achievement"] }],
+  "education": [{ "degree": "", "institution": "", "year": "" }],
+  "certifications": [],
+  "languages": [],
   "atsScore": 85,
-  "improvements": ["improvement 1", "improvement 2"],
+  "improvements": ["improvement 1"],
   "extractedSkills": ["skill1", "skill2"]
 }`,
       },
@@ -53,23 +55,19 @@ Return JSON with this exact structure:
   }
 };
 
-// ── Assessment Generation ───────────────────────────────────────────
+// ── Assessment Generation ──
 export const generateAssessment = async (jobTitle, skills) => {
-  const response = await openai.chat.completions.create({
+  const client = getClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
-      {
-        role: 'system',
-        content: `You are a senior technical interviewer creating assessments to verify candidates' real skills.
-Create challenging but fair questions that truly test knowledge — not just memorization.
-Return ONLY valid JSON, no markdown.`,
-      },
+      { role: 'system', content: 'You are a senior technical interviewer. Return ONLY valid JSON, no markdown.' },
       {
         role: 'user',
         content: `Job Title: ${jobTitle}
 Skills to assess: ${skills.join(', ')}
 
-Generate a 10-question mixed assessment. Return JSON:
+Generate 10 questions. Return JSON:
 {
   "title": "Assessment title",
   "estimatedMinutes": 25,
@@ -77,33 +75,16 @@ Generate a 10-question mixed assessment. Return JSON:
     {
       "id": "q1",
       "type": "multiple_choice",
-      "skill": "skill being tested",
-      "difficulty": "easy|medium|hard",
+      "skill": "skill name",
+      "difficulty": "medium",
       "question": "Question text?",
       "options": ["A", "B", "C", "D"],
       "correctAnswer": "A",
-      "explanation": "Why this is correct"
-    },
-    {
-      "id": "q2",
-      "type": "coding",
-      "skill": "skill being tested",
-      "difficulty": "medium",
-      "question": "Write a function that...",
-      "expectedOutput": "description of expected output",
-      "testCases": [{ "input": "example", "output": "expected" }]
-    },
-    {
-      "id": "q3",
-      "type": "open_ended",
-      "skill": "skill being tested",
-      "difficulty": "hard",
-      "question": "Explain how you would...",
-      "keyPoints": ["point 1", "point 2", "point 3"]
+      "explanation": "Why correct"
     }
   ]
 }
-Mix: 5 multiple_choice, 3 open_ended, 2 coding questions.`,
+Mix: 5 multiple_choice, 3 open_ended, 2 coding.`,
       },
     ],
     temperature: 0.5,
@@ -118,9 +99,10 @@ Mix: 5 multiple_choice, 3 open_ended, 2 coding questions.`,
   }
 };
 
-// ── Score Assessment ────────────────────────────────────────────────
+// ── Score Assessment ──
 export const scoreAssessment = async (questions, answers) => {
-  const qa = questions.map((q, i) => ({
+  const client = getClient();
+  const qa = questions.map(q => ({
     question: q.question,
     type: q.type,
     skill: q.skill,
@@ -128,31 +110,23 @@ export const scoreAssessment = async (questions, answers) => {
     userAnswer: answers[q.id] || '',
   }));
 
-  const response = await openai.chat.completions.create({
+  const response = await client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
-      {
-        role: 'system',
-        content: 'You are a technical assessment scorer. Be fair but strict. Return ONLY valid JSON.',
-      },
+      { role: 'system', content: 'You are a technical assessment scorer. Return ONLY valid JSON.' },
       {
         role: 'user',
-        content: `Score these answers:
-
-${JSON.stringify(qa, null, 2)}
+        content: `Score these answers: ${JSON.stringify(qa, null, 2)}
 
 Return JSON:
 {
   "totalScore": 78,
   "passed": true,
-  "skillScores": { "JavaScript": 85, "React": 70 },
-  "feedback": [
-    { "questionIndex": 0, "score": 100, "feedback": "Correct" },
-    { "questionIndex": 1, "score": 60, "feedback": "Partially correct..." }
-  ],
-  "strengths": ["skill1", "skill2"],
-  "weaknesses": ["skill3"],
-  "verifiedSkills": ["skill1", "skill2"]
+  "skillScores": { "JavaScript": 85 },
+  "feedback": [{ "questionIndex": 0, "score": 100, "feedback": "Correct" }],
+  "strengths": ["skill1"],
+  "weaknesses": ["skill2"],
+  "verifiedSkills": ["skill1"]
 }`,
       },
     ],
@@ -168,37 +142,23 @@ Return JSON:
   }
 };
 
-// ── Job Matching ────────────────────────────────────────────────────
+// ── Job Matching ──
 export const matchJobsWithAI = async (userSkills, userProfile, jobs) => {
-  const response = await openai.chat.completions.create({
+  const client = getClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
-      {
-        role: 'system',
-        content: 'You are an expert job matching AI. Analyze skill overlap deeply. Return ONLY valid JSON.',
-      },
+      { role: 'system', content: 'You are a job matching AI. Return ONLY valid JSON.' },
       {
         role: 'user',
-        content: `Candidate Profile:
-- Job Title: ${userProfile.jobTitle}
-- Verified Skills: ${userSkills.join(', ')}
-- Years Experience: ${userProfile.yearsExperience || 'Unknown'}
-- Location: ${userProfile.location || 'Flexible'}
+        content: `Candidate Skills: ${userSkills.join(', ')}
+Job Title: ${userProfile.jobTitle || 'Not specified'}
 
-Jobs to match (up to 20):
+Jobs:
 ${jobs.map((j, i) => `[${i}] ${j.title} at ${j.company} | Requirements: ${j.requirements?.join(', ')}`).join('\n')}
 
-Return JSON array of top matches (max 10):
-[
-  {
-    "jobIndex": 0,
-    "score": 92,
-    "matchedSkills": ["skill1", "skill2"],
-    "missingSkills": ["skill3"],
-    "reasons": ["Strong match in...", "Experience aligns with..."]
-  }
-]
-Order by score descending.`,
+Return JSON array (top 10 matches):
+[{ "jobIndex": 0, "score": 92, "matchedSkills": ["skill1"], "missingSkills": ["skill2"], "reasons": ["reason"] }]`,
       },
     ],
     temperature: 0.2,
@@ -213,31 +173,25 @@ Order by score descending.`,
   }
 };
 
-// ── Cover Letter Generation ─────────────────────────────────────────
+// ── Cover Letter ──
 export const generateCoverLetter = async (userProfile, cvData, job) => {
-  const response = await openai.chat.completions.create({
+  const client = getClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `You are an expert cover letter writer. Write compelling, personalized cover letters that:
-1. Open with a strong hook — not "I am writing to apply for..."
-2. Connect the candidate's specific experience to the role's needs
-3. Demonstrate knowledge of the company
-4. End with a confident call to action
-Keep it to 3-4 paragraphs, professional yet human.`,
+        content: 'You are an expert cover letter writer. Write compelling, personalized cover letters.',
       },
       {
         role: 'user',
         content: `Candidate: ${userProfile.firstName} ${userProfile.lastName}
-Job Title: ${job.title}
-Company: ${job.company}
-Job Description: ${job.description?.substring(0, 1000)}
-Candidate's Key Skills: ${(userProfile.skills || []).join(', ')}
-Candidate's Summary: ${cvData?.summary || ''}
-Years of Experience: ${userProfile.yearsExperience || ''}
+Job: ${job.title} at ${job.company}
+Description: ${job.description?.substring(0, 800)}
+Skills: ${(userProfile.skills || []).join(', ')}
+Summary: ${cvData?.summary || ''}
 
-Write a professional cover letter.`,
+Write a professional 3-4 paragraph cover letter.`,
       },
     ],
     temperature: 0.7,
