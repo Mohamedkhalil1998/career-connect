@@ -1,6 +1,7 @@
 import { prisma } from '../utils/prisma.js';
 import { matchJobsWithAI } from '../services/openai.service.js';
 import { scrapeAndSaveJobs, seedDemoJobs } from '../services/scraper.service.js';
+import { fetchAndSaveJSearchJobs, searchJobs } from '../services/jsearch.service.js';
 import { AppError } from '../middleware/error.middleware.js';
 
 // ── Get all jobs with filters ──
@@ -9,12 +10,15 @@ export const getJobs = async (req, res) => {
 
   const where = {
     isActive: true,
-    ...(search   && { OR: [
-      { title: { contains: search, mode: 'insensitive' } },
-      { company: { contains: search, mode: 'insensitive' } },
-    ]}),
+    ...(search && {
+      OR: [
+        { title:       { contains: search, mode: 'insensitive' } },
+        { company:     { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ],
+    }),
     ...(location && { location: { contains: location, mode: 'insensitive' } }),
-    ...(type     && { type: { contains: type, mode: 'insensitive' } }),
+    ...(type     && { type:     { contains: type,     mode: 'insensitive' } }),
     ...(source   && { source }),
   };
 
@@ -44,17 +48,15 @@ export const getJobs = async (req, res) => {
   });
 };
 
-// ── Get AI-matched jobs for current user ──
+// ── Get AI-matched jobs ──
 export const getMatchedJobs = async (req, res) => {
-  const profile = await prisma.profile.findUnique({
-    where: { userId: req.user.id },
-  });
+  const profile = await prisma.profile.findUnique({ where: { userId: req.user.id } });
 
   if (!profile?.skills?.length) {
-    throw new AppError('Complete your profile and pass an assessment first to get matched jobs', 400);
+    throw new AppError('Complete your profile and pass an assessment first', 400);
   }
 
-  // Check for cached matches (less than 6 hours old)
+  // Check cache (6 hours)
   const recentMatches = await prisma.jobMatch.findMany({
     where: {
       userId:    req.user.id,
@@ -77,25 +79,32 @@ export const getMatchedJobs = async (req, res) => {
   }
 
   // Get candidate jobs
-  const jobs = await prisma.job.findMany({
+  let jobs = await prisma.job.findMany({
     where:   { isActive: true },
     orderBy: { scrapedAt: 'desc' },
-    take:    50,
+    take:    100,
     select: {
       id: true, title: true, company: true, location: true,
       requirements: true, description: true,
     },
   });
 
-  if (!jobs.length) {
+  // If no jobs, seed demo data
+  if (jobs.length === 0) {
     await seedDemoJobs();
-    return res.json({ matches: [], message: 'Jobs seeded, please try again' });
+    jobs = await prisma.job.findMany({
+      where: { isActive: true },
+      take:  50,
+      select: {
+        id: true, title: true, company: true, location: true,
+        requirements: true, description: true,
+      },
+    });
   }
 
   // AI matching
   const aiMatches = await matchJobsWithAI(profile.skills, profile, jobs);
 
-  // Save matches & return top 10
   const results = [];
   for (const match of aiMatches.slice(0, 10)) {
     const job = jobs[match.jobIndex];
@@ -114,10 +123,10 @@ export const getMatchedJobs = async (req, res) => {
 
     results.push({
       ...job,
-      matchScore:     match.score,
-      matchedSkills:  match.matchedSkills,
-      missingSkills:  match.missingSkills,
-      reasons:        match.reasons,
+      matchScore:    match.score,
+      matchedSkills: match.matchedSkills,
+      missingSkills: match.missingSkills,
+      reasons:       match.reasons,
     });
   }
 
@@ -129,7 +138,6 @@ export const getJobById = async (req, res) => {
   const job = await prisma.job.findUnique({ where: { id: req.params.id } });
   if (!job) throw new AppError('Job not found', 404);
 
-  // Check if user applied
   const application = await prisma.application.findUnique({
     where: { userId_jobId: { userId: req.user.id, jobId: job.id } },
   });
@@ -137,14 +145,58 @@ export const getJobById = async (req, res) => {
   res.json({ ...job, applied: !!application, application });
 };
 
-// ── Trigger manual scrape ──
+// ── Fetch from JSearch API ──
+export const fetchFromJSearch = async (req, res) => {
+  fetchAndSaveJSearchJobs().catch(console.error);
+  res.json({ message: 'JSearch fetch started in background' });
+};
+
+// ── Search jobs on-demand ──
+export const searchJobsOnDemand = async (req, res) => {
+  const { query } = req.query;
+  if (!query) throw new AppError('query is required');
+
+  const jobs = await searchJobs(query);
+
+  // Save to DB
+  for (const job of jobs) {
+    if (!job.title || !job.sourceUrl) continue;
+    try {
+      await prisma.job.upsert({
+        where:  { externalId: job.externalId },
+        update: { isActive: true, scrapedAt: new Date() },
+        create: job,
+      });
+    } catch {}
+  }
+
+  res.json({ jobs, total: jobs.length });
+};
+
+// ── Trigger scrape ──
 export const triggerScrape = async (req, res) => {
   scrapeAndSaveJobs().catch(console.error);
-  res.json({ message: 'Scraping started in background' });
+  res.json({ message: 'Scraping started' });
 };
 
 // ── Seed demo data ──
 export const seedJobs = async (req, res) => {
   await seedDemoJobs();
-  res.json({ message: 'Demo jobs seeded successfully' });
+  res.json({ message: 'Demo jobs seeded' });
+};
+
+// ── Get job sources stats ──
+export const getJobStats = async (req, res) => {
+  const stats = await prisma.job.groupBy({
+    by:     ['source'],
+    _count: { id: true },
+    where:  { isActive: true },
+  });
+
+  const total = await prisma.job.count({ where: { isActive: true } });
+
+  res.json({
+    total,
+    bySource: stats.map(s => ({ source: s.source, count: s._count.id })),
+  });
 };
