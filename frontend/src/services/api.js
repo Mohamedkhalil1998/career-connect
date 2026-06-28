@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: BASE_URL,
   timeout: 60000,
 });
 
@@ -61,11 +63,11 @@ export const jobAPI = {
 
 // ── Applications ──
 export const applicationAPI = {
-  apply:          (data)       => api.post('/applications', data),
-  list:           (params)     => api.get('/applications', { params }),
-  updateStatus:   (id, data)   => api.patch(`/applications/${id}`, data),
-  delete:         (id)         => api.delete(`/applications/${id}`),
-  coverLetter:    (data)       => api.post('/applications/cover-letter', data),
+  apply:        (data)     => api.post('/applications', data),
+  list:         (params)   => api.get('/applications', { params }),
+  updateStatus: (id, data) => api.patch(`/applications/${id}`, data),
+  delete:       (id)       => api.delete(`/applications/${id}`),
+  coverLetter:  (data)     => api.post('/applications/cover-letter', data),
 };
 
 // ── Profile ──
