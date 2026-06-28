@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js",
+    "start": "npx prisma db push && node src/index.js",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "build": "npx prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
