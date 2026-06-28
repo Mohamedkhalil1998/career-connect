@@ -1,7 +1,6 @@
-// This is your Prisma schema file
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -33,11 +32,11 @@ model Profile {
   jobTitle        String?
   location        String?
   bio             String?
-  skills          String[] // verified skills after assessment
+  skills          String[]
   linkedinUrl     String?
   portfolioUrl    String?
   yearsExperience Int?
-  profileComplete Int      @default(0) // percentage
+  profileComplete Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -46,10 +45,10 @@ model CV {
   id              String   @id @default(uuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  originalPath    String   // raw uploaded file
-  enhancedContent String?  @db.Text // AI-enhanced ATS CV text
-  parsedData      Json?    // extracted structured data
-  atsScore        Int?     // ATS compatibility score
+  originalPath    String
+  enhancedContent String?  @db.Text
+  parsedData      Json?
+  atsScore        Int?
   status          CVStatus @default(PROCESSING)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -66,13 +65,13 @@ model Assessment {
   userId      String
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobTitle    String
-  skills      String[]         // skills being assessed
-  questions   Json             // array of questions
-  answers     Json?            // user's answers
+  skills      String[]
+  questions   Json
+  answers     Json?
   score       Float?
   passed      Boolean?
-  recordingId String?          // video/audio recording reference
-  proctoring  Json?            // proctoring data (gaze, tab switches, etc.)
+  recordingId String?
+  proctoring  Json?
   status      AssessmentStatus @default(PENDING)
   startedAt   DateTime?
   completedAt DateTime?
@@ -88,15 +87,15 @@ enum AssessmentStatus {
 
 model Job {
   id            String   @id @default(uuid())
-  externalId    String?  @unique // from source site
+  externalId    String?  @unique
   title         String
   company       String
   location      String?
-  type          String?  // full-time, part-time, remote
+  type          String?
   salary        String?
   description   String   @db.Text
-  requirements  String[] // extracted requirements/skills
-  source        String   // linkedin, wuzzuf, indeed, etc.
+  requirements  String[]
+  source        String
   sourceUrl     String
   postedAt      DateTime?
   scrapedAt     DateTime @default(now())
@@ -111,8 +110,8 @@ model JobMatch {
   userId     String
   jobId      String
   job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  score      Float    // match percentage 0-100
-  reasons    String[] // why it matched
+  score      Float
+  reasons    String[]
   createdAt  DateTime @default(now())
 
   @@unique([userId, jobId])
