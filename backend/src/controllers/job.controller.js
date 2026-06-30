@@ -1,5 +1,5 @@
 import { prisma } from '../utils/prisma.js';
-import { matchJobsWithAI } from '../services/openai.service.js';
+import { matchJobsWithAI } from '../services/gemini.service.js';
 import { scrapeAndSaveJobs, seedDemoJobs } from '../services/scraper.service.js';
 import { fetchAndSaveJSearchJobs, searchJobs } from '../services/jsearch.service.js';
 import { AppError } from '../middleware/error.middleware.js';

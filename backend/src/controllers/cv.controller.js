@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { prisma } from '../utils/prisma.js';
-import { enhanceCVWithAI } from '../services/openai.service.js';
+import { enhanceCVWithAI } from '../services/gemini.service.js';
 import { AppError } from '../middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);

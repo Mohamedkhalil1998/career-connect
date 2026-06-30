@@ -1,5 +1,5 @@
 import { prisma } from '../utils/prisma.js';
-import { generateAssessment, scoreAssessment } from '../services/openai.service.js';
+import { generateAssessment, scoreAssessment } from '../services/gemini.service.js';
 import { AppError } from '../middleware/error.middleware.js';
 
 // ── Generate new assessment ──

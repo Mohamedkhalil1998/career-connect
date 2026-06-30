@@ -1,5 +1,5 @@
 import { prisma } from '../utils/prisma.js';
-import { generateCoverLetter } from '../services/openai.service.js';
+import { generateCoverLetter } from '../services/gemini.service.js';
 import { AppError } from '../middleware/error.middleware.js';
 
 // ── Apply to job ──
