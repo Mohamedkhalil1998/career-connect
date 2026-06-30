@@ -44,19 +44,22 @@ const extractTextFromFile = async (filePath) => {
   }
   
   if (ext === '.pdf') {
-    try {
-      // Use dynamic import to avoid File API issue
-      const { default: pdfParse } = await import('pdf-parse/lib/pdf-parse.js');
-      const buffer = fs.readFileSync(filePath);
-      const data = await pdfParse(buffer);
-      return data.text;
-    } catch (err) {
-      console.warn('PDF parse failed, reading as text:', err.message);
-      // Fallback: read raw bytes and extract readable text
-      const buffer = fs.readFileSync(filePath);
-      const text = buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s+/g, ' ');
-      return text.substring(0, 5000);
+    // Extract readable text directly from PDF bytes (no external library needed)
+    const buffer = fs.readFileSync(filePath);
+    const raw = buffer.toString('latin1');
+
+    // Extract text between PDF stream markers using regex (basic PDF text extraction)
+    const textMatches = raw.match(/\(([^)]+)\)/g) || [];
+    let extracted = textMatches
+      .map(m => m.slice(1, -1))
+      .filter(s => /[a-zA-Z\u0600-\u06FF]/.test(s))
+      .join(' ');
+
+    if (extracted.length < 50) {
+      extracted = raw.replace(/[^\x20-\x7E\n\r\t\u0600-\u06FF]/g, ' ').replace(/\s+/g, ' ');
     }
+
+    return extracted.substring(0, 6000);
   }
   
   // doc/docx fallback
